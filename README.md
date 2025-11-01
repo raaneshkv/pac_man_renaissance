@@ -1,4 +1,3 @@
-# pac_man_renaissance
 # Pac-Renaissance
 
 A modern twist on the classic Pac-Man game built with Python and Pygame.
