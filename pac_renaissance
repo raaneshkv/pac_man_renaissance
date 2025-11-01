@@ -1,0 +1,271 @@
+import pygame, random, sys
+
+pygame.init()
+
+# ---------------- WINDOW SETUP ----------------
+WIDTH, HEIGHT = 672, 744
+ROWS, COLS = 31, 28
+TILE = 24
+WIN = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Pac-Renaissance")
+
+# ---------------- COLORS ----------------
+BLACK = (0, 0, 0)
+BLUE = (33, 33, 222)
+PLAYER_COLOR = (255, 255, 0)  # Yellow
+INVINCIBLE_COLOR = (0, 255, 0)  # Bright green
+POWERUP_COLOR = (255, 165, 0) # Orange
+WHITE = (255, 255, 255)
+RED = (255, 0, 0)
+PINK = (255, 105, 180)
+CYAN = (0, 255, 255)
+PURPLE = (160, 32, 240)
+
+# ---------------- ORIGINAL MAZE ----------------
+# 1=wall, 0=pellet, 3=powerup
+ORIGINAL_MAZE = [
+"1111111111111111111111111111",
+"1000000000110000000000000001",
+"1011111110110111111111101101",
+"1011111110110111111111101101",
+"1011111110110111111111101101",
+"1000000000000000000000030001",
+"1011110111111111111111101101",
+"1000000110000000110000000001",
+"1111110110111110110111111101",
+"1000010000000000000000000001",
+"1111011111110111111111101111",
+"1000010000110000110000110001",
+"1011110110111110110111110101",
+"1000000000000000000000000001",
+"1111111111111111111111111111",
+"1111111111111111111111111111",
+"1000000000000000000000000001",
+"1011110110111110110111111101",
+"1000000110000000110000000001",
+"1111110110111110110111111101",
+"1000010000000000000000000001",
+"1111011111110111111111101111",
+"1000010000110000110000110001",
+"1011110110111110110111110101",
+"1000000000000000000000000001",
+"1111111111111111111111111111",
+"1000000000000000000000000001",
+"1011110110111110110111111101",
+"1000000110000000110000000001",
+"1111110110111110110111111101",
+"1111111111111111111111111111",
+"1111111111111111111111111111",
+]
+
+maze = []
+
+clock = pygame.time.Clock()
+font = pygame.font.Font(None, 36)
+
+# ---------------- PLAYER ----------------
+player_pos = [1, 1]
+player_dir = [0, 0]
+invincible = False
+invincible_timer = 0
+
+# ---------------- GHOST CLASS ----------------
+class Ghost:
+    def __init__(self, r, c, color):
+        self.r = r
+        self.c = c
+        self.color = color
+        self.dir = random.choice([(0,1),(0,-1),(1,0),(-1,0)])
+    def rect(self):
+        return pygame.Rect(self.c*TILE, self.r*TILE, TILE, TILE)
+    def move(self):
+        options = [(1,0),(-1,0),(0,1),(0,-1)]
+        valid_dirs = [d for d in options if can_move(self.r+d[0], self.c+d[1])]
+        if len(valid_dirs) > 2:
+            self.dir = random.choice(valid_dirs)
+        dr, dc = self.dir
+        if can_move(self.r+dr, self.c+dc):
+            self.r += dr
+            self.c += dc
+        else:
+            if valid_dirs:
+                self.dir = random.choice(valid_dirs)
+
+ghosts = []
+
+# ---------------- GAME FUNCTIONS ----------------
+def reset_game():
+    global maze, player_pos, player_dir, invincible, invincible_timer, ghosts
+    maze = [list(map(int,row)) for row in ORIGINAL_MAZE]
+    player_pos = [1,1]
+    player_dir = [0,0]
+    invincible = False
+    invincible_timer = 0
+    ghosts.clear()
+    ghosts.extend([
+        Ghost(13,14,RED),
+        Ghost(14,13,PINK),
+        Ghost(13,13,CYAN),
+        Ghost(12,12,PURPLE)
+    ])
+
+def draw_maze():
+    for r in range(len(maze)):
+        for c in range(len(maze[0])):
+            x, y = c * TILE, r * TILE
+            if maze[r][c] == 1:
+                pygame.draw.rect(WIN, BLUE, (x, y, TILE, TILE))
+            elif maze[r][c] == 0:
+                pygame.draw.circle(WIN, WHITE, (x+TILE//2, y+TILE//2), 3)
+            elif maze[r][c] == 3:
+                pygame.draw.circle(WIN, POWERUP_COLOR, (x+TILE//2, y+TILE//2), 6)
+
+def can_move(r, c):
+    return 0 <= r < len(maze) and 0 <= c < len(maze[0]) and maze[r][c] != 1
+
+def move_player():
+    global player_pos, invincible, invincible_timer
+    r, c = player_pos
+    dr, dc = player_dir
+    nr, nc = r + dr, c + dc
+    if can_move(nr, nc):
+        player_pos = [nr, nc]
+        if maze[nr][nc] == 0:
+            maze[nr][nc] = 2
+        elif maze[nr][nc] == 3:
+            maze[nr][nc] = 2
+            global invincible
+            invincible = True
+            global invincible_timer
+            invincible_timer = 200  # 20 seconds at 10 FPS
+
+def move_ghosts():
+    for g in ghosts:
+        g.move()
+
+def draw_entities():
+    pr, pc = player_pos
+    color = PLAYER_COLOR
+    if invincible:
+        # Flashing effect: change every 5 frames
+        if invincible_timer % 10 < 5:
+            color = INVINCIBLE_COLOR
+        else:
+            color = PLAYER_COLOR
+
+    pygame.draw.circle(WIN, color, (pc*TILE+TILE//2, pr*TILE+TILE//2), 10)
+
+    for g in ghosts:
+        pygame.draw.circle(WIN, g.color, (g.c*TILE+TILE//2, g.r*TILE+TILE//2), 10)
+
+def check_collision():
+    pr, pc = player_pos
+    for g in ghosts:
+        dist = ((pc - g.c)**2 + (pr - g.r)**2)**0.5
+        if dist < 1:
+            return True
+    return False
+
+# ---------------- STORY + SCREENS ----------------
+def draw_text_centered(text, y, color=WHITE, size=36):
+    f = pygame.font.Font(None, size)
+    surf = f.render(text, True, color)
+    rect = surf.get_rect(center=(WIDTH//2, y))
+    WIN.blit(surf, rect)
+
+def title_screen():
+    username = ""
+    while True:
+        WIN.fill(BLACK)
+        draw_text_centered("PAC-RENAISSANCE", HEIGHT//2 - 100, PLAYER_COLOR, 72)
+        draw_text_centered("Enter your name and press ENTER", HEIGHT//2, WHITE, 32)
+        pygame.draw.rect(WIN, WHITE, (WIDTH//2 - 150, HEIGHT//2 + 40, 300, 40), 2)
+        draw_text_centered(username, HEIGHT//2 + 60, PLAYER_COLOR, 36)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit(); sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN and username.strip():
+                    return username
+                elif event.key == pygame.K_BACKSPACE:
+                    username = username[:-1]
+                elif len(username) < 10 and event.unicode.isalnum():
+                    username += event.unicode
+        pygame.display.update()
+        clock.tick(30)
+
+def story_intro(username):
+    story_lines = [
+        f"{username}, the neon maze calls once again...",
+        "Long ago, you escaped the ghosts of the Grid.",
+        "But they’ve evolved — smarter, faster, and hungrier.",
+        "Your mission:",
+        "Find the ancient Power Orb and restore light to the Maze.",
+        "Your journey begins now..."
+    ]
+    for line in story_lines:
+        WIN.fill(BLACK)
+        draw_text_centered(line, HEIGHT//2, WHITE, 40)
+        pygame.display.update()
+        pygame.time.wait(1500)
+
+# ---------------- MAIN GAME LOOP ----------------
+def main_game(username):
+    global player_dir, invincible, invincible_timer
+    run = True
+    next_dir = [0,0]
+    while run:
+        clock.tick(10)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit(); sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_UP: next_dir = [-1,0]
+                elif event.key == pygame.K_DOWN: next_dir = [1,0]
+                elif event.key == pygame.K_LEFT: next_dir = [0,-1]
+                elif event.key == pygame.K_RIGHT: next_dir = [0,1]
+
+        # queued direction
+        r, c = player_pos
+        nr, nc = r + next_dir[0], c + next_dir[1]
+        if can_move(nr, nc):
+            player_dir = next_dir
+
+        move_player()
+        move_ghosts()
+
+        if invincible:
+            invincible_timer -=1
+            if invincible_timer <=0:
+                invincible = False
+
+        WIN.fill(BLACK)
+        draw_maze()
+        draw_entities()
+        pygame.display.update()
+
+        if check_collision() and not invincible:
+            WIN.fill(BLACK)
+            draw_text_centered(f"{username}, you were caught!", HEIGHT//2-40, WHITE, 50)
+            draw_text_centered("Press ENTER to return to Title", HEIGHT//2+40, WHITE, 36)
+            pygame.display.update()
+            waiting = True
+            while waiting:
+                for e in pygame.event.get():
+                    if e.type == pygame.QUIT:
+                        pygame.quit(); sys.exit()
+                    if e.type == pygame.KEYDOWN:
+                        if e.key == pygame.K_RETURN:
+                            waiting = False
+                            run = False
+
+# ---------------- RUN ----------------
+def main():
+    while True:
+        username = title_screen()
+        story_intro(username)
+        reset_game()
+        main_game(username)
+
+if __name__ == "__main__":
+    main()
